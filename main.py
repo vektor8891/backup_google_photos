@@ -7,7 +7,7 @@ import shutil
 import subprocess
 
 # year to check
-selected_year = '2022'
+selected_year = '2023'
 
 # path to ZIP file downloaded from Google Takeout
 zip_file_path = os.path.expanduser('~/Downloads/takeout-20230809T005049Z-001.zip')
@@ -21,7 +21,7 @@ temp_dir = os.path.expanduser('~/Downloads/GooglePhotos_temp/')
 # open ZIP file
 with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
     # loop through each file
-    for i, item in enumerate(zip_ref.infolist()[0:1000]):
+    for i, item in enumerate(zip_ref.infolist()):
         file_path = item.filename
         ext = os.path.splitext(file_path)[1].lower()
         file_name_old = os.path.basename(file_path)
