@@ -4,6 +4,7 @@ import zipfile
 from PIL import Image
 import pyheif
 import shutil
+import subprocess
 
 # path to ZIP file downloaded from Google Takeout
 zip_file_path = os.path.expanduser('~/Downloads/takeout-20230809T005049Z-001.zip')
@@ -17,7 +18,8 @@ temp_dir = os.path.expanduser('~/Downloads/GooglePhotos_temp/')
 # open ZIP file
 with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
     # loop through each file
-    for item in zip_ref.infolist()[1:600]:
+    for i, item in enumerate(zip_ref.infolist()[502:503]):
+        print(i)
         file_path = item.filename
         ext = os.path.splitext(file_path)[1].lower()
         file_name_old = os.path.basename(file_path)
@@ -53,7 +55,8 @@ with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
                             image = Image.frombytes(heic_image.mode, heic_image.size, heic_image.data, "raw",
                                                     heic_image.mode, heic_image.stride)
                             image.save(extract_file_path, format='JPEG')
-                            print(f"[SUCCESS] {file_name_old} successfully converted to JPG & extracted to {extract_file_path}")
+                            print(
+                                f"[SUCCESS] {file_name_old} successfully converted to JPG & extracted to {extract_file_path}")
                         except ValueError as e:
                             if str(e) == 'Input is not a HEIF/AVIF file':
                                 # try to save original file as JPG
@@ -63,17 +66,38 @@ with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
                             else:
                                 raise ValueError(e)
                     elif ext in ['.mp4', '.mov']:
-                        # save movie to temporary directory
-                        zip_ref.extract(item, temp_folder)
                         temp_file_path = os.path.join(temp_folder, item.filename)
-                        # check file size
-                        file_size_bytes = os.path.getsize(temp_file_path)
-                        file_size_mb = file_size_bytes / (1024 * 1024)
-                        if file_size_mb < 99:
-                            # move small file to final directory
-                            shutil.move(temp_file_path, extract_file_path)
+                        if not os.path.exists(temp_file_path):
+                            # save movie to temporary directory
+                            zip_ref.extract(item, temp_folder)
+                            # check file size
+                            file_size_bytes = os.path.getsize(temp_file_path)
+                            file_size_mb = file_size_bytes / (1024 * 1024)
+                            if file_size_mb < 99:
+                                # move small file to final directory
+                                shutil.move(temp_file_path, extract_file_path)
+                            else:
+                                # split big videos into small parts
+                                script_path = os.path.abspath(__file__)
+                                script_directory = os.path.dirname(script_path)
+                                command = ['bash', 'split-video.sh', temp_file_path, "90000000",
+                                           "-c:v libx264 -crf 23 -c:a copy -vf scale=640:-2 -y"]
+                                result = subprocess.run(command, cwd=script_directory, stdout=subprocess.PIPE,
+                                                        text=True, check=True)
+                                output = result.stdout.strip()
+                                print(f"[SUCCESS] Large video {file_name_old} split into small parts")
+
+                                # move new files to final destination
+                                all_files = os.listdir(temp_folder)
+                                matching_files = [f for f in all_files if
+                                                  f.startswith(item.filename[:-4]) and f.endswith('.mp4')]
+                                for f in matching_files:
+                                    source_path = os.path.join(temp_folder, f)
+                                    destination_path = os.path.join(extract_folder, f)
+                                    shutil.move(source_path, destination_path)
+                                    print(f"[SUCCESS] Small video {f} moved to {extract_folder}")
                         else:
-                            raise ValueError(f'{year}/{file_name_old} size too big ({file_size_mb} Mb)')
+                            print(f"[SKIP] Large video {file_name_old} already processed - skipping...")
                     else:
                         raise ValueError(f'[ERROR] {file_name_old} has unknown extension: {ext}')
                 else:
